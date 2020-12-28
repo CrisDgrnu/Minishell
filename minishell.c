@@ -1,14 +1,38 @@
 #include <stdio.h>
 
 #include <sys/types.h>
+#include <string.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-
-
-
 #include "parser.h"
+
+void cd(tline* line){
+    char* home_dir;
+    int handler;
+
+    if (line->commands[0].argv[1] == NULL)
+    {
+        home_dir = getenv("HOME");
+        handler = chdir(home_dir);
+        if (handler<0)
+        {
+            fprintf(stderr,"Error al cambiar de directorio\n");
+        }
+    } 
+    else
+    {
+        handler = chdir(line->commands[0].argv[1]);
+        if (handler<0)
+        {
+            fprintf(stderr,"Error al cambiar al directorio: %s\n",line->commands[0].argv[1]);
+        }
+        
+    }
+    
+    
+}
 
 void execute(tline* line){
     int ncommands;
@@ -58,6 +82,11 @@ int main(void) {
 			continue;
 		}
 
+        if (strcmp(line->commands[0].argv[0],"cd") == 0)
+        {
+            cd(line);
+        }
+        
         execute(line);
         printf("==> ");	
 	}
