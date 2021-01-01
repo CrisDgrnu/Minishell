@@ -36,25 +36,33 @@ void cd(tline* line){
     }
 }
 
-void create_redirect(int fhandler,int fdescriptor){
+// Crea las redirecciones
+void create_redirect(int fhandler,int std_redirect){
+
+    // En caso de error
     if (fhandler<0)
     {
-        fprintf(stderr,"Error at redirecting to file descriptor %d",fdescriptor);
+        fprintf(stderr,"Error at redirecting to file descriptor %d",std_redirect);
         exit(1);
     }
-    dup2(fhandler,fdescriptor);
+
+    // Redireccion en función del descriptor de fichero
+    dup2(fhandler,std_redirect);
     close(fhandler);
 }
 
+// Cambia las entradas/salidas en funcion del comando
 void setup_redirects(tline* line, int ccmds){
     int fhandler;
 
+    // Redirección de entrada estandar
     if (ccmds == 0 && (line->redirect_input != NULL))
     {
         fhandler = open(line->redirect_input,O_RDONLY);
         create_redirect(fhandler,0);
     }
 
+    // Redirección de salida estandar
     if (ccmds == (line->ncommands-1) && (line->redirect_output != NULL))
     {
         fhandler = creat(line->redirect_output,0644);
@@ -62,6 +70,7 @@ void setup_redirects(tline* line, int ccmds){
         
     }
 
+    // Redirección de salida de error
     if (ccmds == (line->ncommands-1) && (line->redirect_error != NULL))
     {
         fhandler = creat(line->redirect_error,0644);
