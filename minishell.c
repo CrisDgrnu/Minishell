@@ -7,6 +7,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include "parser.h"
+#include <fcntl.h>
 
 // Cambiar de directorio
 void cd(tline* line){
@@ -22,9 +23,7 @@ void cd(tline* line){
 
         // En caso de error
         if (handler<0)
-        {
             fprintf(stderr,"Error al cambiar de directorio\n");
-        }
     } 
     else
     {   
@@ -33,21 +32,52 @@ void cd(tline* line){
 
         // En caso de error
         if (handler<0)
-        {
             fprintf(stderr,"Error al cambiar al directorio: %s\n",line->commands[0].argv[1]);
-        }
+    }
+}
+
+void create_redirect(int fhandler,int fdescriptor){
+    if (fhandler<0)
+    {
+        fprintf(stderr,"Error at redirecting to file descriptor %d",fdescriptor);
+        exit(1);
+    }
+    dup2(fhandler,fdescriptor);
+    close(fhandler);
+}
+
+void setup_redirects(tline* line, int ccmds){
+    int fhandler;
+
+    if (ccmds == 0 && (line->redirect_input != NULL))
+    {
+        fhandler = open(line->redirect_input,O_RDONLY);
+        create_redirect(fhandler,0);
+    }
+
+    if (ccmds == (line->ncommands-1) && (line->redirect_output != NULL))
+    {
+        fhandler = creat(line->redirect_output,0644);
+        create_redirect(fhandler,1);
+        
+    }
+
+    if (ccmds == (line->ncommands-1) && (line->redirect_error != NULL))
+    {
+        fhandler = creat(line->redirect_error,0644);
+        create_redirect(fhandler,2);
         
     }
 }
 
 // Cierra los pipes y libera la memoria utilizada por ellos
 void close_pipes(tline* line,int** p){
-    int i;
-    for (i = 0; i < line->ncommands-1; i++)
+    int cont;
+    for (cont = 0; cont < line->ncommands-1; cont++)
     {
-        close(p[i][0]);
-        close(p[i][1]);
-        free(p[i]);
+        close(p[cont][0]);
+        close(p[cont][1]);
+        free(p[cont]);
     }
     free(p);
 }
@@ -70,6 +100,29 @@ int** create_pipes(tline* line){
     return p;
 
 }
+
+// Configura las entradas y salidas de los comandos en funcion de los pipes
+void setup_pipes(tline* line,int** pip,int ccmds){
+    
+    // Redireccion del primer pipe
+    if (ccmds == 0)
+        dup2(pip[0][1],1);
+
+    // Redirección del ultimo pipe
+    else if (ccmds == (line-> ncommands-1))
+        dup2(pip[ccmds-1][0],0);
+
+    // Redirección de pipes intermedios
+    else
+    {
+        dup2(pip[ccmds][1],1);
+        dup2(pip[ccmds-1][0],0);
+    }
+
+    // Cierre de pipes en subproceso
+    close_pipes(line,pip);
+}
+
 void execute(tline* line){
     int ccmds;
     pid_t pid;
@@ -77,9 +130,7 @@ void execute(tline* line){
 
     // Creacion de pipes
     if (line->ncommands > 1)
-    {
         pip = create_pipes(line);
-    }
     
 
     // Cada comando trata de ejecutarse en un subproceso
@@ -100,32 +151,13 @@ void execute(tline* line){
         if (pid == 0)
         {
             
+            // Ejecucion con redirecciones
+            if ((line->redirect_input != NULL) || (line->redirect_output != NULL) || (line->redirect_error != NULL))
+                setup_redirects(line,ccmds);
+            
             // Ejecucion con pipes -> Deben redigirse las entradas y salidas
             if (line->ncommands > 1)
-            {
-                // Redireccion del primer pipe
-                if (ccmds == 0)
-                {
-                    dup2(pip[0][1],1);
-                }
-
-                // Redirección del ultimo pipe
-                else if (ccmds == (line-> ncommands-1))
-                {
-                    dup2(pip[ccmds-1][0],0);
-                }
-
-                // Redirección de pipes intermedios
-                else
-                {
-                    dup2(pip[ccmds][1],1);
-                    dup2(pip[ccmds-1][0],0);
-                }
-
-                // Cierre de pipes en subproceso
-                close_pipes(line,pip);
-            }
-            
+                setup_pipes(line,pip,ccmds);
             
             execvp(line->commands[ccmds].filename,line->commands[ccmds].argv);
             exit(1);
@@ -134,16 +166,11 @@ void execute(tline* line){
     
     // Cierre de pipes en proceso padre
     if (line->ncommands>1)
-    {
         close_pipes(line,pip);
-    }
     
     // Esperar hasta que cada subproceso termine
     for (ccmds = 0; ccmds < line->ncommands; ccmds++)
-    {
         wait(NULL);
-    }
-    
 }
 
 int main(void) {
@@ -156,14 +183,10 @@ int main(void) {
 		
         line = tokenize(buf);
 		if (line==NULL) 
-        {
 			continue;
-		}
 
         if (strcmp(line->commands[0].argv[0],"cd") == 0)
-        {
             cd(line);
-        }
         
         execute(line);
         printf("==> ");	
