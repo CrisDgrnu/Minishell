@@ -136,6 +136,9 @@ void execute(tline* line){
     int ccmds;
     pid_t pid;
     int** pip;
+    int *pids;
+
+    pids = malloc(sizeof(pid_t) * line->ncommands);
 
     // Creacion de pipes
     if (line->ncommands > 1)
@@ -156,9 +159,18 @@ void execute(tline* line){
             exit(1);
         }
 
+        // Se guardan los pids de los procesos a ejecutar
+        pids[ccmds] = pid;
+
         // Ejecucion del comando en un subproceso
         if (pid == 0)
         {
+            // Si no hay procesos en background, se activan las señales
+            if (!line->background)
+            {
+                signal(SIGINT,SIG_DFL);
+                signal(SIGQUIT,SIG_DFL);
+            }
             
             // Ejecucion con redirecciones
             if ((line->redirect_input != NULL) || (line->redirect_output != NULL) || (line->redirect_error != NULL))
@@ -168,6 +180,7 @@ void execute(tline* line){
             if (line->ncommands > 1)
                 setup_pipes(line,pip,ccmds);
             
+            // Ejecicion del comando
             execvp(line->commands[ccmds].filename,line->commands[ccmds].argv);
             exit(1);
         }            
@@ -177,15 +190,38 @@ void execute(tline* line){
     if (line->ncommands>1)
         close_pipes(line,pip);
     
-    // Esperar hasta que cada subproceso termine
-    for (ccmds = 0; ccmds < line->ncommands; ccmds++)
-        wait(NULL);
+    // Esperar a los procesos que no ejecutan en bacnkground
+    if (!line->background)
+    {
+        for (ccmds = 0; ccmds < line->ncommands; ccmds++)
+            waitpid(pids[ccmds],NULL,0);
+        
+    }
+
+    // Mostrar aquellos que ejecuten en background
+    else{
+        for (ccmds = 0; ccmds < line->ncommands; ccmds++)
+            printf("[%d]\n",pids[ccmds]);
+        
+    }
+    free(pids);
+    
+}
+
+// Manejador para procesos en background
+void background_management(int sig){
+    waitpid(WAIT_ANY,NULL,WNOHANG);
 }
 
 int main(void) {
 	char buf[1024];
 	tline * line;
     
+    signal(SIGINT,SIG_IGN);
+    signal(SIGQUIT,SIG_IGN);
+
+    signal(SIGCHLD,background_management);
+
 	printf("==> ");	
 	while (fgets(buf, 1024, stdin)) 
     {
