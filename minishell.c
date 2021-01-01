@@ -11,7 +11,7 @@
 
 // Cambiar de directorio
 void cd(tline* line){
-    char* home_dir;
+    char *home_dir;
     int handler;
 
     // Si se ejecuta cd sin argumentos, cambiamos a home
@@ -215,7 +215,7 @@ void background_management(int sig){
 
 int main(void) {
 	char buf[1024];
-	tline * line;
+	tline *line;
     
     signal(SIGINT,SIG_IGN);
     signal(SIGQUIT,SIG_IGN);
@@ -225,10 +225,10 @@ int main(void) {
 	printf("==> ");	
 	while (fgets(buf, 1024, stdin)) 
     {
-		
         line = tokenize(buf);
-		if (line==NULL) 
-			continue;
+		if (line==NULL){
+            continue;
+        } 
 
         if (strcmp(line->commands[0].argv[0],"cd") == 0)
             cd(line);
