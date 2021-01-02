@@ -226,14 +226,13 @@ int main(void) {
 	while (fgets(buf, 1024, stdin)) 
     {
         line = tokenize(buf);
-		if (line==NULL){
-            continue;
-        } 
-
-        if (strcmp(line->commands[0].argv[0],"cd") == 0)
-            cd(line);
+		if (line->ncommands>0){
+            if (strcmp(line->commands[0].argv[0],"cd") == 0)
+                cd(line);
         
-        execute(line);
+            execute(line);
+        } 
+  
         printf("==> ");	
 	}
 	return 0;
