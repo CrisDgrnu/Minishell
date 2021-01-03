@@ -181,7 +181,12 @@ void execute(tline* line){
                 setup_pipes(line,pip,ccmds);
             
             // Ejecicion del comando
+            if (line->commands[ccmds].filename==NULL){
+				  fprintf(stderr,"%s: Error comando no encontrado\n",line->commands[ccmds].argv[0]);
+            exit(1);
+			}
             execvp(line->commands[ccmds].filename,line->commands[ccmds].argv);
+            fprintf(stderr,"Error\n");
             exit(1);
         }            
     }
@@ -225,14 +230,18 @@ int main(void) {
 	printf("==> ");	
 	while (fgets(buf, 1024, stdin)) 
     {
-        line = tokenize(buf);
-		if (line->ncommands>0){
-            if (strcmp(line->commands[0].argv[0],"cd") == 0)
-                cd(line);
-        
-            execute(line);
-        } 
-  
+		if (buf[0]!='\n'){
+			
+			line = tokenize(buf);
+			if (line==NULL){
+				continue;
+			} 
+
+			if (strcmp(line->commands[0].argv[0],"cd") == 0)
+				cd(line);
+			else
+				execute(line);
+		}
         printf("==> ");	
 	}
 	return 0;
