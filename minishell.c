@@ -9,6 +9,121 @@
 #include "parser.h"
 #include <fcntl.h>
 
+// Tipo de dato Job para almacenar procesos en segundo plano
+typedef struct Job {
+    pid_t pid; 
+    char buf[1024];
+    struct Job* next; 
+} Job;
+
+// Lista de procesos en segundo plano
+typedef struct Jobs{
+    Job* head;
+} Jobs;
+
+Jobs* jobs;
+
+// Almacenar proceso en segundo plano
+Job* createNode(char buf[1024],pid_t pid){
+    Job* job = (Job *) malloc(sizeof(Job));
+    strcpy(job->buf,buf);
+    job->pid = pid;
+    job->next = NULL;
+    return job;
+}
+
+// Construir lista
+Jobs* buildList(){
+    jobs = (Jobs *) malloc(sizeof(Jobs));
+    jobs->head = NULL;
+    return jobs;
+}
+
+// Comprobar si la lista esta vacia
+int isEmpty(){
+    return jobs->head == NULL;
+}
+
+// Añadir proceso
+void add(char buf[1024],pid_t pid){
+    Job* job = createNode(buf,pid);
+    job->next = jobs->head;
+    jobs->head = job;
+}
+
+// Borrar proceso
+void delete(pid_t pid){
+    if (jobs->head)
+    {
+        if (pid == jobs->head->pid)
+        {
+            Job* deleted = jobs->head;
+            jobs->head = jobs->head->next;
+            free(deleted);
+        }
+        else{
+            Job* job = jobs->head;
+            while (pid != job->next->pid)
+                job = job->next;
+
+            Job* deleted = job->next;
+            job->next = deleted->next;
+            free(deleted); 
+        }
+               
+    }
+    
+}
+
+// Ver procesos en segundo plano
+void check_jobs(){
+    Job* suc = jobs->head;
+    while (suc != NULL){
+        printf("[%d] Ejecutando  =>  %s",suc->pid,suc->buf);
+        suc = suc->next;
+    }
+}
+
+// Manejador para procesos en background
+void background_management(int sig){
+    pid_t pid = waitpid(WAIT_ANY,NULL,WNOHANG);
+    if (pid<0)
+    {
+        fprintf(stderr,"Error al eliminar proceso en segundo plano\n");
+        exit(1);
+    }  
+    delete(pid);
+}
+
+// Traer ultimo proceso ejecutando en segundo plano a primer plano
+void fg(){
+    pid_t pid;
+    // Si no hay procesos en segundo plano error
+    if (isEmpty(jobs))
+        fprintf(stderr,"No hay procesos en segundo plano\n");
+    else
+    {   
+        signal(SIGCHLD,SIG_IGN);
+        pid = jobs->head->pid;
+        waitpid(pid,NULL,0);
+        signal(SIGCHLD,background_management);
+        delete(pid);
+    }    
+}
+
+// Traer proceso de segundo plano a primer plano por pid
+void fg_pid(pid_t pid){
+    if (isEmpty(jobs))
+        fprintf(stderr,"No hay procesos en segundo plano\n");
+    else
+    {   
+        signal(SIGCHLD,SIG_IGN);
+        waitpid(pid,NULL,0);
+        signal(SIGCHLD,background_management);
+        delete(pid);
+    }    
+}
+
 // Cambiar de directorio
 void cd(tline* line){
     char *home_dir;
@@ -132,7 +247,7 @@ void setup_pipes(tline* line,int** pip,int ccmds){
     close_pipes(line,pip);
 }
 
-void execute(tline* line){
+void execute(tline* line,char buf[1024]){
     int ccmds;
     pid_t pid;
     int** pip;
@@ -159,13 +274,17 @@ void execute(tline* line){
             exit(1);
         }
 
+        if (line->background)
+            add(buf,pid);
+
         // Se guardan los pids de los procesos a ejecutar
         pids[ccmds] = pid;
 
         // Ejecucion del comando en un subproceso
         if (pid == 0)
         {
-            // Si no hay procesos en background, se activan las señales
+
+            // Si no hay procesos en background, se activan las señales por defecto
             if (!line->background)
             {
                 signal(SIGINT,SIG_DFL);
@@ -184,6 +303,7 @@ void execute(tline* line){
             if (line->commands[ccmds].filename==NULL){
 				  fprintf(stderr,"%s: Error comando no encontrado\n",line->commands[ccmds].argv[0]);
             exit(1);
+
 			}
             execvp(line->commands[ccmds].filename,line->commands[ccmds].argv);
             fprintf(stderr,"Error\n");
@@ -209,19 +329,16 @@ void execute(tline* line){
             printf("[%d]\n",pids[ccmds]);
         
     }
+
     free(pids);
     
-}
-
-// Manejador para procesos en background
-void background_management(int sig){
-    waitpid(WAIT_ANY,NULL,WNOHANG);
 }
 
 int main(void) {
 	char buf[1024];
 	tline *line;
-    
+    jobs = buildList();
+
     signal(SIGINT,SIG_IGN);
     signal(SIGQUIT,SIG_IGN);
 
@@ -239,8 +356,14 @@ int main(void) {
 
 			if (strcmp(line->commands[0].argv[0],"cd") == 0)
 				cd(line);
+            else if (strcmp(line->commands[0].argv[0],"jobs") == 0)            
+                check_jobs(jobs);
+            else if ((strcmp(line->commands[0].argv[0],"fg") == 0) && line->commands[0].argv[1] != NULL) 
+                fg_pid(atoi(line->commands[0].argv[1]));
+            else if ((strcmp(line->commands[0].argv[0],"fg") == 0) && line->commands[0].argv[1] == NULL)
+                fg();
 			else
-				execute(line);
+				execute(line,buf);
 		}
         printf("==> ");	
 	}
