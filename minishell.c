@@ -1,5 +1,4 @@
 #include <stdio.h>
-
 #include <sys/types.h>
 #include <string.h>
 #include <unistd.h>
@@ -75,6 +74,22 @@ void delete(pid_t pid){
     
 }
 
+// Encontrar un trabajo en la lista
+Job* find_job(int pid){
+    if (jobs->head == NULL)
+        return NULL;
+    else{
+        Job* job = jobs->head;
+        while (job->next)
+        {
+            if (job->pid == pid)
+                return job;
+            job = job->next;
+        }
+        return NULL;
+    }
+}
+
 // Ver procesos en segundo plano
 void check_jobs(){
     Job* suc = jobs->head;
@@ -87,12 +102,13 @@ void check_jobs(){
 // Manejador para procesos en background
 void background_management(int sig){
     pid_t pid = waitpid(WAIT_ANY,NULL,WNOHANG);
-    if (pid<0)
+    if ((pid<0) && (find_job(pid) != NULL))
     {
         fprintf(stderr,"Error al eliminar proceso en segundo plano\n");
         exit(1);
-    }  
-    delete(pid);
+    } 
+    if (pid>0) 
+		delete(pid);
 }
 
 // Traer ultimo proceso ejecutando en segundo plano a primer plano
@@ -105,6 +121,7 @@ void fg(){
     {   
         signal(SIGCHLD,SIG_IGN);
         pid = jobs->head->pid;
+        printf("%s\n",jobs->head->buf);
         waitpid(pid,NULL,0);
         signal(SIGCHLD,background_management);
         delete(pid);
@@ -118,6 +135,7 @@ void fg_pid(pid_t pid){
     else
     {   
         signal(SIGCHLD,SIG_IGN);
+        printf("%s\n",find_job(pid)->buf);
         waitpid(pid,NULL,0);
         signal(SIGCHLD,background_management);
         delete(pid);
@@ -157,7 +175,7 @@ void create_redirect(int fhandler,int std_redirect){
     // En caso de error
     if (fhandler<0)
     {
-        fprintf(stderr,"Error at redirecting to file descriptor %d",std_redirect);
+        fprintf(stderr,"Error al redireccionar a %d",std_redirect);
         exit(1);
     }
 
@@ -327,7 +345,6 @@ void execute(tline* line,char buf[1024]){
     else{
         for (ccmds = 0; ccmds < line->ncommands; ccmds++)
             printf("[%d]\n",pids[ccmds]);
-        
     }
 
     free(pids);
