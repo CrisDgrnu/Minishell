@@ -317,7 +317,7 @@ void execute(tline* line,char buf[1024]){
             if (line->ncommands > 1)
                 setup_pipes(line,pip,ccmds);
             
-            // Ejecicion del comando
+            // Error de ejecucion del comando
             if (line->commands[ccmds].filename==NULL){
 				  fprintf(stderr,"%s: Error comando no encontrado\n",line->commands[ccmds].argv[0]);
             exit(1);
